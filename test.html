@@ -1,0 +1,70 @@
+<html>
+<head>
+    <title></title>
+
+    <script type="text/javascript" src="jquery-latest.js"></script>
+    <style>
+        .pass:before {
+            content: 'PASS: ';
+            color: blue;
+            font-weight: bold;
+        }
+
+        .fail:before {
+            content: 'FAIL: ';
+            color: red;
+            font-weight: bold;
+
+        }
+    </style>
+</head>
+<body>
+<ul id="output"/>
+
+<script type="text/javascript">
+    var output = document.getElementById('output');
+
+    function assert(outcome, description) {
+        var li = document.createElement('li');
+        li.className = outcome ? 'pass' : 'fail';
+        li.appendChild(document.createTextNode(description));
+        output.appendChild(li);
+    }
+
+
+    var promises = function() {
+        var promises = [];
+        for (var i = 0; i < 5; i++) {
+            (function(i) {
+                promises.push(function() {
+                    return $.Deferred(
+                            function(dfd) {
+                                $.ajax({
+                                    url : 'http://127.0.0.1:1337',
+                                    data : i,
+                                    type: 'GET',
+                                    success: function(data) {
+                                        dfd.resolve(data);
+                                    }
+                                })
+                            }).promise();
+                });
+            })(i)
+        }
+        return promises;
+    };
+
+    var proms = promises();
+    proms[0]().done(function(result) {
+                assert(result.data != null, "OK");
+                return $.Deferred(function(dfd){
+                    dfd.resolve("returned");
+                }).promise();
+            }).then(function(chainedResult) {
+                assert(chainedResult ==  "returned", "OK");
+                console.log(chainedResult);
+            });
+</script>
+
+</body>
+</html>

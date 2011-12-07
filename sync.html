@@ -1,0 +1,174 @@
+<html>
+<head>
+    <title></title>
+
+    <script type="text/javascript" src="jquery-latest.js"></script>
+    <style>
+        .pass:before {
+            content: 'PASS: ';
+            color: blue;
+            font-weight: bold;
+        }
+
+        .fail:before {
+            content: 'FAIL: ';
+            color: red;
+            font-weight: bold;
+
+        }
+    </style>
+</head>
+<body>
+<ul id="output"/>
+
+<script type="text/javascript">
+    var output = document.getElementById('output');
+
+    function assert(outcome, description) {
+        var li = document.createElement('li');
+        li.className = outcome ? 'pass' : 'fail';
+        li.appendChild(document.createTextNode(description));
+        output.appendChild(li);
+    }
+    ;
+
+    function seq(array) {
+        var seed = $.Deferred(), result = $.Deferred(), finalPromise;
+        var results = [];
+
+        finalPromise = array.reduce(function(promise, request) {
+            return promise.pipe(function(input) {
+                if (input) results.push(input);
+                return request();
+            });
+        }, seed.promise());
+        seed.resolve();
+
+        finalPromise.done(
+                function(i) {
+                    results.push(i);
+                }).then(function() {
+                    result.resolve(results);
+                });
+        return result.promise();
+    }
+
+
+    function seq1(array) {
+        var seed = $.Deferred().resolve([]);
+        if (!array || array.length == 0) return seed;
+        else {
+            return array.reduce(function(state, promise) {
+                return state.pipe(function(input) {
+                    return promise().pipe(function(i) {
+                        return input.concat(i);
+                    });
+                });
+            }, seed.promise());
+        }
+    }
+
+    function par(array) {
+        var deferred = $.Deferred();
+        var fulfilled = 0, length = array.length;
+        var results = [];
+
+        if (array && array.length == 0) {
+            deferred.resolve(results);
+        } else {
+            array.forEach(function(promise, i) {
+                $.when(promise()).then(function(value) {
+                    results[i] = value;
+                    fulfilled++;
+                    if (fulfilled === length) {
+                        deferred.resolve(results);
+                    }
+                });
+            });
+        }
+        return deferred.promise();
+    }
+
+    function par1(array) {
+        var seed = $.Deferred().resolve([]);
+        if (!array || array.length == 0) return seed;
+        else {
+            return array.map(
+                    function(p) {
+                        return p();
+                    }).reduce(function(state, promise) {
+                        return state.pipe(function(input) {
+                            return promise.pipe(function(i) {
+                                return input.concat(i);
+                            });
+                        });
+                    }, seed.promise());
+        }
+    }
+
+
+    var promises = function() {
+        var promises = [];
+        for (var i = 0; i < 5; i++) {
+            promises.push(function() {
+                return $.Deferred(
+                        function(dfd) {
+                            $.ajax({
+                                url : 'http://127.0.0.1:1337',
+                                type: 'GET',
+                                success: function(data) {
+                                    dfd.resolve(data);
+                                }
+                            })
+                        }).promise();
+            });
+        }
+        return promises;
+    };
+
+    var start = new Date();
+    var proms = promises();
+    $.when(par1(proms)).then(function(results) {
+        var stop = new Date();
+        console.log("Parallel :" + ((stop - start) / 1000).toString());
+        for (var i = 0; i < results.length; i++) {
+            var obj = results[i];
+            console.log(obj.data + '');
+        }
+        assert(results.length == proms.length, "Parallel processing ok");
+
+    });
+
+    var promsPrime = promises();
+    $.when.apply(null, promsPrime).then(function(results) {
+        assert(results.length == proms.length, "Parallel 2 processing ok");
+        console.log(results);
+    });
+
+
+    var start2 = new Date();
+    var proms2 = promises();
+    $.when(seq1(proms2)).then(function(results) {
+        var stop = new Date();
+        console.log("Sequential :" + ((stop - start2) / 1000).toString());
+        for (var i = 0; i < results.length; i++) {
+            var obj = results[i];
+            console.log(obj.data + '');
+        }
+        assert(results.length == proms2.length, "Serial processing ok");
+
+    });
+
+    $.when(seq1(null)).then(function(results) {
+        assert(results.length == 0, 'null array Serial processing');
+    });
+
+    $.when(seq1([])).then(function(results) {
+        assert(results.length == 0, 'empty array Serial processing');
+    });
+
+
+</script>
+
+</body>
+</html>
